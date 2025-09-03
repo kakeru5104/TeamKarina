@@ -1,182 +1,163 @@
-using System.Collections;
+/// <summary>
+/// Appクラスは遺伝的アルゴリズム(GA)による個体集団の管理・進化・描画・UI連携を担当します。
+/// - GAコンポーネントで集団の進化を制御
+/// - DrawingManegerで個体の描画
+/// - UIから評価値を取得し進化に反映
+/// - 世代数や進化ボタンの管理
+/// </summary>
+
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
-// このクラスは「Individual.cs」という個別のファイルに分けるのが理想です。
+// 個体クラス：遺伝子情報を保持
 public class Individual
 {
     public int[] gene;
-
 }
 
-
+// アプリケーションのメイン制御クラス
 public class App : MonoBehaviour
 {
-
-
-    // インスペクターで設定するドロップダウンのゲームオブジェクトリスト
-    public List<GameObject> dropdown_obj_list = new List<GameObject>();
-
-    // ===== インスペクターから設定する参照 =====
     [Header("必須コンポーネント")]
     [Tooltip("遺伝的アルゴリズムを担当するGAコンポーネント")]
     public GA ga;
 
     [Tooltip("個体の描画を担当するDrawingManegerコンポーネント")]
-    //public DrawingManeger drawingManager;
-
     public DrawingManeger[] drawingManagers;
 
     [Header("UI要素")]
-    public GameObject nextGenerationButton;
-    public GameObject canvas;
-    public GameObject[] objBGs;
+    public List<GameObject> dropdownObjList = new List<GameObject>(); // 評価用ドロップダウンリスト
+    public GameObject nextGenerationButton; // 次世代生成ボタン
+    public GameObject canvas; // UIキャンバス
+    public GameObject[] objBGs; // 背景オブジェクト
+    public TextMeshProUGUI generationText; // 世代表示テキスト
 
-    // ===== スクリプト内部で使う変数 =====
-    private Individual[] population;
-    private int[] fitnessValues;
-    public TextMeshProUGUI generationText;
+    private Individual[] population; // 現在の集団
+    private int[] fitnessValues; // 評価値配列
 
+    // 初期化処理
     void Start()
     {
-        // --- 必須コンポーネントが設定されているかチェック ---
+        if (!ValidateComponents()) return; // 必須コンポーネントの確認
+
+        InitializePopulation(); // 集団の初期化
+        ga.Initialize(population); // GAの初期化
+        UpdateGenerationText(); // 世代表示の更新
+        DrawInitialPopulation(); // 初期集団の描画
+    }
+
+    // 次世代の描画・進化処理
+    public void RenderNextGeneration()
+    {
+        int[] scores = GetDropdownScores(); // UIから評価値取得
+        LogScores(scores); // 評価値のログ出力
+
+        population = ga.Evolve(scores); // GAで進化
+        UpdateGenerationText(); // 世代表示の更新
+        DrawPopulation(); // 新しい集団の描画
+        ResetDropdowns(); // ドロップダウンのリセット
+        CheckGenerationLimit(); // 世代数の上限チェック
+    }
+
+    // 必須コンポーネントの確認
+    private bool ValidateComponents()
+    {
         if (ga == null)
         {
-            Debug.LogError("GAスクリプトがインスペクターで設定されていません！", this.gameObject);
-            return;
+            Debug.LogError("GAスクリプトがインスペクターで設定されていません！", gameObject);
+            return false;
         }
         if (drawingManagers == null)
         {
-            Debug.LogError("DrawingManegerスクリプトがインスペクターで設定されていません！", this.gameObject);
-            return;
+            Debug.LogError("DrawingManegerスクリプトがインスペクターで設定されていません！", gameObject);
+            return false;
         }
+        return true;
+    }
 
-        // --- 初期化処理 ---
+    // 集団の初期化
+    private void InitializePopulation()
+    {
         int popSize = ga.POP_SIZE;
         population = new Individual[popSize];
         fitnessValues = new int[popSize];
-
         for (int i = 0; i < popSize; ++i)
         {
             population[i] = new Individual();
         }
-
-        // GAに初期集団を渡して、遺伝子をランダムに初期化してもらう
-        ga.Initialize(population);
-
-        UpdateGenerationText();
-
-        // --- 最初の個体を描画 ---
-        // 最初の集団の0番目の個体を描画
-        if (population != null && population.Length > 0)
-        {
-            Debug.Log("初期集団の最初の個体を描画します。");
-            // この命令が正しく動作するようになります
-            for (int i = 0; i < 10; i++)
-            {
-                drawingManagers[i].DrawImageFromGene(population[i].gene);
-            }
-        }
-
-
     }
 
-    /// <summary>
-    /// UIのボタンなどから呼び出して、次の世代を生成・描画するメソッド
-    /// </summary>
-    public void RenderNextGeneration()
+    // 初期集団の描画
+    private void DrawInitialPopulation()
     {
-        int i = 0;
-        int[] score = new int[ga.POP_SIZE];//ga.POP_SIZE:10
-        foreach (var dropdown_obj in dropdown_obj_list)
+        if (population == null || population.Length == 0) return;
+        Debug.Log("初期集団の最初の個体を描画します。");
+        for (int i = 0; i < drawingManagers.Length && i < population.Length; i++)
         {
-
-            // ゲームオブジェクトからTMP_Dropdownコンポーネントを取得
-            TMP_Dropdown dropdown = dropdown_obj.GetComponent<TMP_Dropdown>();
-
-            score[i] = dropdown.value;
-
-            i++;
-
+            drawingManagers[i].DrawImageFromGene(population[i].gene);
         }
-
-        for (int j = 0; j < 10; j++)
-        {
-            Debug.Log(score[j]);
-        }
-
-       population = ga.Evolve(score);
-
-
-
-        UpdateGenerationText();
-
-        for (int k = 0; k < population.Length; k++){
-            {
-                drawingManagers[k].DrawImageFromGene(population[k].gene);
-               
-            }
-        }
-
-        //ドロップダウンの初期化
-        foreach (var dropdown_obj in dropdown_obj_list)
-        {
-            if (dropdown_obj != null)
-            {
-                TMP_Dropdown dropdown = dropdown_obj.GetComponent<TMP_Dropdown>();
-                if (dropdown != null)
-                {
-                    // valueプロパティに0を設定することで、先頭の選択肢に戻す
-                    dropdown.value = 0;
-                }
-            }
-        }
-
-        CheckGenerationLimit();
-
-
-
-        // // GAに評価値を渡して、次の世代の個体群を生成してもらう
-        //     if (ga != null)
-        //     {
-        //         population = ga.Evolve(fitnessValues);
-        //     }
-
-        // // 新しい世代の最初の個体を描画する
-        // if (drawingManagers != null && population != null && population.Length > 0)
-        // {
-        //     Debug.Log("新しい世代の最初の個体を描画します。");
-        //     for (int i = 0; i < 10; i++)
-        //     {
-        //         drawingManagers[i].DrawImageFromGene(population[i].gene);
-        //     }
-        // }
     }
 
-    //世代数表示
+    // UIドロップダウンから評価値を取得
+    private int[] GetDropdownScores()
+    {
+        int[] scores = new int[ga.POP_SIZE];
+        for (int i = 0; i < dropdownObjList.Count && i < scores.Length; i++)
+        {
+            TMP_Dropdown dropdown = dropdownObjList[i].GetComponent<TMP_Dropdown>();
+            scores[i] = dropdown.value;
+        }
+        return scores;
+    }
+
+    // 評価値のログ出力
+    private void LogScores(int[] scores)
+    {
+        for (int j = 0; j < scores.Length; j++)
+        {
+            Debug.Log(scores[j]);
+        }
+    }
+
+    // 集団の描画
+    private void DrawPopulation()
+    {
+        for (int k = 0; k < population.Length && k < drawingManagers.Length; k++)
+        {
+            drawingManagers[k].DrawImageFromGene(population[k].gene);
+        }
+    }
+
+    // ドロップダウンのリセット
+    private void ResetDropdowns()
+    {
+        foreach (var dropdownObj in dropdownObjList)
+        {
+            if (dropdownObj == null) continue;
+            TMP_Dropdown dropdown = dropdownObj.GetComponent<TMP_Dropdown>();
+            if (dropdown != null)
+            {
+                dropdown.value = 0;
+            }
+        }
+    }
+
+    // 世代表示の更新
     private void UpdateGenerationText()
     {
         if (generationText != null && ga != null)
         {
-            // GAインスタンスから最新の世代数を取得してUIに表示
             generationText.text = $"{ga.currentGeneration}";
         }
     }
 
+    // 世代数の上限チェック
     private void CheckGenerationLimit()
     {
-        if (ga != null && nextGenerationButton != null)
+        if (ga != null && nextGenerationButton != null && ga.currentGeneration >= ga.MAX_GEN)
         {
-            // 現在の世代数が最大世代数以上になったか？
-            if (ga.currentGeneration >= ga.MAX_GEN)
-            {
-                // ボタンをクリックできないようにする
-                nextGenerationButton.SetActive(false);
-                
-            }
-
+            nextGenerationButton.SetActive(false);
         }
     }
 }
